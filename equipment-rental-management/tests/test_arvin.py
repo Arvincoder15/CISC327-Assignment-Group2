@@ -1,6 +1,8 @@
 # Tests for Renter Management and Rental Operations
 # Arvin - Member 2
 
+from datetime import date, timedelta
+
 def test_create_renter(client):
     response = client.post("/renters", json={
         "name": "Alex",
@@ -93,3 +95,127 @@ def test_delete_nonexistent_renter(client):
     response = client.delete("/renters/999")
     assert response.status_code == 404
 
+# ---------- RENTAL TEST HELPER ----------
+
+def create_test_rental(client):
+    equipment = client.post("/equipment", json={
+        "name": "Camping Tent",
+        "category": "Camping",
+        "total_units": 2
+    }).get_json()
+
+    renter = client.post("/renters", json={
+        "name": "Alex",
+        "email": "alex@example.com"
+    }).get_json()
+
+    response = client.post("/rentals", json={
+        "equipment_id": equipment["id"],
+        "renter_id": renter["id"],
+        "deposit_amount": 50.0
+    })
+
+    assert response.status_code == 201
+
+    return equipment["id"], response.get_json()["id"]
+
+
+# ---------- RETURN RENTAL ----------
+
+def test_return_restores_equipment(client):
+    equipment_id, rental_id = create_test_rental(client)
+
+    before = client.get(
+        f"/equipment/{equipment_id}"
+    ).get_json()
+    assert before["available_units"] == 1
+
+    response = client.put(f"/rentals/{rental_id}/return")
+
+    assert response.status_code == 200
+    assert response.get_json()["return_date"] is not None
+
+    after = client.get(
+        f"/equipment/{equipment_id}"
+    ).get_json()
+    assert after["available_units"] == 2
+
+
+def test_cannot_return_twice(client):
+    _, rental_id = create_test_rental(client)
+
+    first = client.put(f"/rentals/{rental_id}/return")
+    second = client.put(f"/rentals/{rental_id}/return")
+
+    assert first.status_code == 200
+    assert second.status_code == 400
+    assert second.get_json()["error"] == "Rental already returned"
+
+
+# ---------- EXTEND RENTAL ----------
+
+def test_extend_rental(client):
+    _, rental_id = create_test_rental(client)
+
+    response = client.put(
+        f"/rentals/{rental_id}/extend",
+        json={"days": 2}
+    )
+
+    assert response.status_code == 200
+
+    expected_due_date = date.today() + timedelta(days=9)
+
+    assert response.get_json()["due_date"] == (
+        expected_due_date.isoformat()
+    )
+
+
+def test_cannot_extend_returned_rental(client):
+    _, rental_id = create_test_rental(client)
+
+    client.put(f"/rentals/{rental_id}/return")
+
+    response = client.put(
+        f"/rentals/{rental_id}/extend",
+        json={"days": 2}
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Rental already returned"
+
+
+# ---------- RELEASE RENTAL DEPOSIT ----------
+
+def test_cannot_release_deposit_before_return(client):
+    _, rental_id = create_test_rental(client)
+
+    response = client.put(
+        f"/rentals/{rental_id}/deposit/release"
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == (
+        "Equipment has not been returned yet"
+    )
+
+
+def test_deposit_release_persists(client):
+    _, rental_id = create_test_rental(client)
+
+    client.put(f"/rentals/{rental_id}/return")
+
+    response = client.put(
+        f"/rentals/{rental_id}/deposit/release"
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["deposit_released"] is True
+
+    rentals = client.get("/rentals").get_json()
+    saved_rental = next(
+        rental for rental in rentals
+        if rental["id"] == rental_id
+    )
+
+    assert saved_rental["deposit_released"] is True
