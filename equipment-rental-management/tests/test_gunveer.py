@@ -113,3 +113,110 @@ def test_change_equipment_status(client):
     check = client.get(f"/equipment/{equipment_id}/availability")
     assert check.status_code == 200
     assert check.get_json()["is_available"] is False
+
+
+def test_equipment_availability(client):
+    response = client.post("/equipment", json={
+        "name": "Mountain Bike",
+        "category": "Bicycle",
+        "total_units": 5
+    })
+    equipment_id = response.get_json()["id"]
+
+    response = client.get(f"/equipment/{equipment_id}/availability")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["available_units"] == 5
+    assert data["total_units"] == 5
+    assert data["is_available"] is True
+
+
+def test_equipment_checkout(client):
+    equipment = client.post("/equipment", json={
+        "name": "Kayak",
+        "category": "Water Sports",
+        "total_units": 3
+    }).get_json()
+
+    renter = client.post("/renters", json={
+        "name": "Jake",
+        "email": "jake@example.com"
+    }).get_json()
+
+    response = client.post("/rentals", json={
+        "equipment_id": equipment["id"],
+        "renter_id": renter["id"]
+    })
+
+    assert response.status_code == 201
+    rental = response.get_json()
+    assert rental["equipment_id"] == equipment["id"]
+    assert rental["renter_id"] == renter["id"]
+    assert rental["due_date"] is not None
+    assert rental["return_date"] is None
+
+    check = client.get(f"/equipment/{equipment['id']}/availability")
+    assert check.get_json()["available_units"] == 2
+
+
+def test_list_rentals(client):
+    equipment = client.post("/equipment", json={
+        "name": "Tent",
+        "category": "Camping",
+        "total_units": 2
+    }).get_json()
+
+    renter = client.post("/renters", json={
+        "name": "Sam",
+        "email": "sam@example.com"
+    }).get_json()
+
+    client.post("/rentals", json={
+        "equipment_id": equipment["id"],
+        "renter_id": renter["id"]
+    })
+
+    response = client.get("/rentals")
+
+    assert response.status_code == 200
+    rentals = response.get_json()
+    assert len(rentals) == 1
+    assert rentals[0]["equipment_id"] == equipment["id"]
+    assert rentals[0]["renter_id"] == renter["id"]
+
+
+def test_filter_rentals_by_renter(client):
+    equipment1 = client.post("/equipment", json={
+        "name": "Bike",
+        "category": "Bicycle",
+        "total_units": 2
+    }).get_json()
+
+    equipment2 = client.post("/equipment", json={
+        "name": "Kayak",
+        "category": "Water Sports",
+        "total_units": 2
+    }).get_json()
+
+    renter = client.post("/renters", json={
+        "name": "Jake",
+        "email": "jake@example.com"
+    }).get_json()
+
+    client.post("/rentals", json={
+        "equipment_id": equipment1["id"],
+        "renter_id": renter["id"]
+    })
+
+    client.post("/rentals", json={
+        "equipment_id": equipment2["id"],
+        "renter_id": renter["id"]
+    })
+
+    response = client.get(f"/rentals?renter_id={renter['id']}")
+
+    assert response.status_code == 200
+    rentals = response.get_json()
+    assert len(rentals) == 2
+    assert all(r["renter_id"] == renter["id"] for r in rentals)
