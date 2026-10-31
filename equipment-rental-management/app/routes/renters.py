@@ -5,11 +5,20 @@ from app.models.renter import Renter
 
 renters_bp = Blueprint("renters", __name__, url_prefix="/renters")
 
-
 @renters_bp.route("", methods=["GET"])
 def list_renters():
-    return jsonify([r.to_dict() for r in store.renters.values()])
+    renters = list(store.renters.values())
 
+    # R4: Allow staff to search renters by name.
+    name_query = request.args.get("name", "").strip()
+
+    if name_query:
+        renters = [
+            renter for renter in renters
+            if name_query.casefold() in renter.name.casefold()
+        ]
+
+    return jsonify([renter.to_dict() for renter in renters])
 
 @renters_bp.route("", methods=["POST"])
 def create_renter():
