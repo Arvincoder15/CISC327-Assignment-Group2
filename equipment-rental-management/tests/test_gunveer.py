@@ -220,3 +220,56 @@ def test_filter_rentals_by_renter(client):
     rentals = response.get_json()
     assert len(rentals) == 2
     assert all(r["renter_id"] == renter["id"] for r in rentals)
+
+
+
+def test_cannot_checkout_out_of_service_equipment(client):
+    equipment = client.post("/equipment", json={
+        "name": "Damaged Kayak",
+        "category": "Kayak",
+        "total_units": 2
+    }).get_json()
+
+    equipment_id = equipment["id"]
+
+    client.patch(
+        f"/equipment/{equipment_id}/status",
+        json={"is_available": False}
+    )
+
+    response = client.post("/rentals", json={
+        "equipment_id": equipment_id,
+        "renter_id": 1
+    })
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Equipment is out of service"
+
+    check = client.get(f"/equipment/{equipment_id}")
+    assert check.get_json()["available_units"] == 2
+
+    rentals = client.get("/rentals").get_json()
+    assert len(rentals) == 0
+
+
+def test_checkout_serviceable_equipment(client):
+    equipment = client.post("/equipment", json={
+        "name": "Mountain Bike",
+        "category": "Bicycle",
+        "total_units": 3
+    }).get_json()
+
+    renter = client.post("/renters", json={
+        "name": "Jake",
+        "email": "jake@example.com"
+    }).get_json()
+
+    response = client.post("/rentals", json={
+        "equipment_id": equipment["id"],
+        "renter_id": renter["id"]
+    })
+
+    assert response.status_code == 201
+
+    check = client.get(f"/equipment/{equipment['id']}")
+    assert check.get_json()["available_units"] == 2
