@@ -78,7 +78,7 @@ and "Alexander Smith".
 - If no name is provided, the API returns all renters.
 - Successful requests return HTTP 200.
 
-**Automated tests:** `tests/test_renter_search.py`
+**Automated tests:** `tests/test_arvin.py`
 
 ## R7: Prevent Checkout of Out-of-Service Equipment
 
