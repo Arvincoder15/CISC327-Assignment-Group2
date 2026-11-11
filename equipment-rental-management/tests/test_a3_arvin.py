@@ -213,3 +213,60 @@ def test_api_release_deposit_before_return(client):
         "Equipment has not been returned yet"
     )
     assert rental.deposit_released is False
+
+# ---------------------------------------------------------
+# Task 2 — Notification tests: Member B (Arvin)
+# ---------------------------------------------------------
+
+def test_checkout_notification_failure_stub(client, monkeypatch):
+    """A failed notification must not prevent a successful checkout."""
+    item = add_equipment(available_units=2)
+    renter = add_renter()
+
+    # Stub: the notification service always reports failure.
+    monkeypatch.setattr(
+        "app.routes.rentals.send_notification",
+        lambda recipient, subject, message: False,
+    )
+
+    response = client.post(
+        "/rentals",
+        json={
+            "equipment_id": item.id,
+            "renter_id": renter.id,
+        },
+    )
+
+    result = response.get_json()
+
+    # Verify application response and stored state.
+    assert response.status_code == 201
+    assert result["notification_sent"] is False
+    assert result["equipment_id"] == item.id
+    assert result["renter_id"] == renter.id
+    assert len(store.rentals) == 1
+    assert item.available_units == 1
+
+
+def test_checkout_rejected_does_not_send_notification_mock(client):
+    """A rejected checkout must never trigger a notification."""
+    from unittest.mock import patch
+
+    renter = add_renter()
+
+    with patch("app.routes.rentals.send_notification") as mock_send:
+        response = client.post(
+            "/rentals",
+            json={
+                "equipment_id": 999,
+                "renter_id": renter.id,
+            },
+        )
+
+    # Verify the rejected checkout did not change rental state.
+    assert response.status_code == 404
+    assert response.get_json()["error"] == "Equipment not found"
+    assert len(store.rentals) == 0
+
+    # Verify no interaction with the notification service.
+    mock_send.assert_not_called()
