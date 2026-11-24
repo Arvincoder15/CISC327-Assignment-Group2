@@ -115,9 +115,198 @@ The following tests are implemented in `tests/test_gunveer.py`:
 
 **Test results:** 2 passed, 0 failed.
 
-## Tests
+
+## Assignment 4: End-to-End Testing and Containerization
+
+Assignment 4 extends the existing Equipment Rental Management
+application with browser-based end-to-end testing using Playwright
+and application containerization using Docker.
+
+### Prerequisites
+
+- Python 3.11 or a compatible newer version
+- pip
+- Git
+- Playwright and Chromium
+- Docker Desktop (macOS/Windows) or Docker Engine (Linux)
+
+All commands below should be executed from the
+`equipment-rental-management` directory.
+
+### Local Application Setup
+
+Create and activate a Python virtual environment:
 
 ```bash
-pytest
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
+On Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+Install the required dependencies and Chromium:
+
+```bash
+python -m pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+Start the Flask application:
+
+```bash
+python run.py
+```
+
+Open the application in a browser at:
+
+http://127.0.0.1:5000/
+
+### Existing Automated Tests
+
+Run the existing unit and integration tests separately from
+the browser-based E2E tests:
+
+```bash
+python -m pytest -v --ignore=tests/e2e --cov=app --cov-report=term-missing --cov-fail-under=90
+```
+
+The existing Assignment 3 test suite contains 62 tests,
+with a minimum required coverage threshold of 90%.
+
+### End-to-End Testing
+
+The E2E tests use Playwright to automate user interactions
+with the existing HTML interface through a real Chromium browser.
+
+| Member | Scenario | Type |
+|---|---|---|
+| Arvin Askari | Create a renter and verify registration | Successful |
+| Arvin Askari | Prevent duplicate rental returns from increasing availability twice | Boundary |
+| Gunveer | Add equipment and verify its details | Successful |
+| Gunveer | Attempt checkout of nonexistent equipment | Error |
+
+Test files:
+
+- `tests/e2e/test_a4_arvin.py`
+- `tests/e2e/test_a4_gunveer.py`
+
+Each test creates the data it requires and does not rely on
+data created by other tests.
+
+Start the Flask application in one terminal:
+
+```bash
+python run.py
+```
+
+In a second terminal, activate the virtual environment and
+run all E2E tests in headed mode:
+
+```bash
+python -m pytest tests/e2e -v --headed
+```
+
+To run the tests in headless mode:
+
+```bash
+python -m pytest tests/e2e -v
+```
+
+To run an individual member's tests:
+
+```bash
+python -m pytest tests/e2e/test_a4_arvin.py -v --headed
+python -m pytest tests/e2e/test_a4_gunveer.py -v --headed
+```
+
+### Docker Setup
+
+Ensure Docker is installed and running:
+
+```bash
+docker --version
+docker info
+```
+
+Build the Docker image from the application directory:
+
+```bash
+docker build -t cisc327-a4 .
+```
+
+Stop any locally running Flask application before starting
+the Docker container to avoid a port conflict.
+
+Run the container:
+
+```bash
+docker run --rm --name cisc327-a4-container -p 5000:5000 cisc327-a4
+```
+
+The containerized application listens on `0.0.0.0:5000`
+and exposes port 5000 to the host machine.
+
+Access the application at:
+
+http://127.0.0.1:5000/
+
+To verify that the application responds over HTTP:
+
+```bash
+curl -i http://127.0.0.1:5000/
+```
+
+To view the running container:
+
+```bash
+docker ps
+```
+
+To stop the container, press Ctrl+C in the terminal running
+Docker or execute:
+
+```bash
+docker stop cisc327-a4-container
+```
+
+### Running E2E Tests Against Docker
+
+Ensure that the local Flask server is stopped and the Docker
+container is running on port 5000.
+
+From a separate terminal, activate the local Python virtual
+environment and execute:
+
+```bash
+python -m pytest tests/e2e -v --headed
+```
+
+The same E2E test suite is used for both local Flask execution
+and Docker execution without modifying the test code.
+
+### Data Persistence
+
+The application uses an in-memory data store rather than
+a persistent database.
+
+All equipment, renter, and rental records are reset when
+the Flask application or Docker container stops or restarts.
+
+The E2E tests generate their own test data to support
+independent and reproducible execution.
+
+### Continuous Integration
+
+GitHub Actions automatically runs two separate test jobs:
+
+- Existing unit and integration tests with a minimum
+  coverage threshold of 90%.
+- Playwright E2E tests using headless Chromium and a
+  running Flask application.
+
+The workflow is located at `.github/workflows/tests.yml`
+in the repository root.
